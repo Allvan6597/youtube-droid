@@ -34,8 +34,6 @@ jobs:
 
     - name: Build with Gradle
       run: gradle assembleDebug
-      env:
-        PYTHON_PATH: /usr/bin/python3
 
     - name: Get version
       id: version
