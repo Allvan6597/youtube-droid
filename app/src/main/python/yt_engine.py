@@ -822,24 +822,45 @@ class YoutubeCipherEngine:
         self.ensure_initialized()
         return dict(self._cipher_params or {})
 
-    def get_working_urls(self) -> list[dict]:
+    def get_working_urls(self) -> tuple[list[dict], str | None]:
         """
         Get working stream URLs via INNERTUBE API (ANDROID_VR client).
 
-        Primary method - no cipher decryption needed as ANDROID_VR
-        returns pre-signed URLs.
-
-        Falls back to signature decryption for formats that still
-        have cipher data (unlikely for ANDROID_VR).
+        Returns (formats, error_msg) where error_msg is None on success.
         """
-        # Try to get sts from existing player JS cache
         sts = self._extract_sts_from_player_js()
-        response = call_innertube_player_api(self._video_id, sts=sts)
-        if not response:
-            log.warning("INNERTUBE API failed for %s", self._video_id)
-            return []
+        visitor_data = self._fetch_visitor_data()
 
+        response = call_innertube_player_api(
+            self._video_id, sts=sts, visitor_data=visitor_data
+        )
+        if not response:
+            return [], "INNERTUBE API فشل الاستجابة"
+
+        # Check playability
+        playability = response.get("playabilityStatus") or {}
+        status = playability.get("status", "")
+        if status and status != "OK":
+            reason = playability.get("reason", "")
+            subreason = playability.get("subReason", {}).get("reason", "")
+            msg = f"يوتيوب: {reason}"
+            if subreason:
+                msg += f" ({subreason})"
+            return [], msg
+
+        # Try again without visitor_data if it failed with it, or vice versa
         formats = extract_formats_from_player_response(response)
+        if not formats:
+            if visitor_data:
+                response = call_innertube_player_api(self._video_id, sts=sts)
+            else:
+                response = call_innertube_player_api(
+                    self._video_id, sts=sts,
+                    visitor_data=self._fetch_visitor_data(force=True)
+                )
+            if response:
+                formats = extract_formats_from_player_response(response)
+
         result = []
         for fmt in formats:
             url = fmt.get("url")
@@ -866,7 +887,34 @@ class YoutubeCipherEngine:
                         ))
                         fmt["url"] = fmt_url
                         result.append(fmt)
-        return result
+
+        if not result:
+            return [], "لا توجد ستريمات متاحة لهذا الفيديو"
+        return result, None
+
+    def _fetch_visitor_data(self, force: bool = False) -> str | None:
+        """Fetch visitor data from YouTube homepage."""
+        import http.cookies
+        key = "X-Goog-Visitor-Id"
+        if hasattr(self, "_visitor_data") and not force:
+            return self._visitor_data
+        try:
+            req = urllib.request.Request(
+                "https://www.youtube.com",
+                headers={"User-Agent": ANDROID_VR_HEADERS["User-Agent"]},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                cookie_str = resp.headers.get("Set-Cookie", "")
+                for c in cookie_str.split(","):
+                    if "VISITOR_INFO1_LIVE" in c:
+                        m = re.search(r"VISITOR_INFO1_LIVE=([^;]+)", c)
+                        if m:
+                            v = m.group(1)
+                            self._visitor_data = v
+                            return v
+        except Exception:
+            pass
+        return None
 
     def _extract_sts_from_player_js(self) -> int | None:
         """Extract signature timestamp from cached player JS."""
@@ -956,7 +1004,10 @@ def get_formats_for_kotlin(video_id: str) -> str:
     import traceback
     try:
         engine = YoutubeCipherEngine(video_id)
-        urls = engine.get_working_urls()
+        urls, error = engine.get_working_urls()
+        if error:
+            return json.dumps({"success": False, "error": error})
+
         formats = []
         for f in urls:
             mime = f.get("mimeType", "") or ""
