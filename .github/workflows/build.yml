@@ -3,9 +3,10 @@ name: Build APK
 on:
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ master ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -36,9 +37,18 @@ jobs:
       env:
         PYTHON_PATH: /usr/bin/python3
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
+    - name: Get version
+      id: version
+      run: echo "tag=v$(date +%Y.%m.%d)-r${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
       with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/*.apk
-        if-no-files-found: error
+        tag_name: ${{ steps.version.outputs.tag }}
+        name: "Build ${{ steps.version.outputs.tag }}"
+        body: |
+          Automated build ${{ github.run_number }}
+          Commit: ${{ github.sha }}
+        files: app/build/outputs/apk/debug/*.apk
+        generate_release_notes: false
+        make_latest: false
