@@ -14,8 +14,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
 import com.google.android.material.snackbar.Snackbar
 import com.ytdroid.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
@@ -37,10 +35,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-        }
 
         binding.formatsRecycler.layoutManager = LinearLayoutManager(this)
 

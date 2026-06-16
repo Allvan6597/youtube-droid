@@ -882,7 +882,7 @@ class YoutubeCipherEngine:
         if self._player_js:
             return
 
-        cache_dir = os.path.join(os.path.dirname(__file__), ".cache")
+        cache_dir = os.path.join(os.environ.get("HOME", os.path.dirname(__file__)), ".yt_cache")
         cache_path = os.path.join(cache_dir, "player.js")
         cache_meta_path = cache_path + ".meta"
         max_cache_age = 3600  # 1 hour
