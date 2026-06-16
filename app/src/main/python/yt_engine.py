@@ -611,38 +611,94 @@ def http_get_text(url: str, timeout: int = 30) -> str | None:
 INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 INNERTUBE_API_URL = "https://www.youtube.com/youtubei/v1/player"
 
-ANDROID_VR_CONTEXT = {
-    "client": {
-        "clientName": "ANDROID_VR",
-        "clientVersion": "1.65.10",
-        "deviceMake": "Oculus",
-        "deviceModel": "Quest 3",
-        "androidSdkVersion": 32,
-        "osName": "Android",
-        "osVersion": "12L",
+CLIENTS = [
+    {
+        "name": "ANDROID_VR",
+        "context": {
+            "client": {
+                "clientName": "ANDROID_VR",
+                "clientVersion": "1.65.10",
+                "deviceMake": "Oculus",
+                "deviceModel": "Quest 3",
+                "androidSdkVersion": 32,
+                "osName": "Android",
+                "osVersion": "12L",
+            },
+        },
+        "headers": {
+            "X-YouTube-Client-Name": "28",
+            "X-YouTube-Client-Version": "1.65.10",
+            "User-Agent": "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+        },
     },
-}
-
-ANDROID_VR_HEADERS = {
-    "X-YouTube-Client-Name": "28",
-    "X-YouTube-Client-Version": "1.65.10",
-    "User-Agent": "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
-    "Content-Type": "application/json",
-    "Origin": "https://www.youtube.com",
-}
+    {
+        "name": "ANDROID",
+        "context": {
+            "client": {
+                "clientName": "ANDROID",
+                "clientVersion": "19.09.37",
+                "androidSdkVersion": 33,
+                "osName": "Android",
+                "osVersion": "13",
+            },
+        },
+        "headers": {
+            "X-YouTube-Client-Name": "3",
+            "X-YouTube-Client-Version": "19.09.37",
+            "User-Agent": "com.google.android.youtube/19.09.37 (Linux; U; Android 13; Pixel 7) gzip",
+        },
+    },
+    {
+        "name": "TVHTML5_SIMPLY",
+        "context": {
+            "client": {
+                "clientName": "TVHTML5_SIMPLY",
+                "clientVersion": "7.20230510.18.00",
+                "deviceMake": "Google",
+                "deviceModel": "Chromecast Ultra",
+                "osName": "Android",
+                "osVersion": "12",
+            },
+        },
+        "headers": {
+            "X-YouTube-Client-Name": "106",
+            "X-YouTube-Client-Version": "7.20230510.18.00",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 12; Chromecast Ultra) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.166 Safari/537.36",
+        },
+    },
+    {
+        "name": "ANDROID_MUSIC",
+        "context": {
+            "client": {
+                "clientName": "ANDROID_MUSIC",
+                "clientVersion": "6.21.51",
+                "androidSdkVersion": 33,
+                "osName": "Android",
+                "osVersion": "13",
+            },
+        },
+        "headers": {
+            "X-YouTube-Client-Name": "21",
+            "X-YouTube-Client-Version": "6.21.51",
+            "User-Agent": "com.google.android.apps.youtube.music/6.21.51 (Linux; U; Android 13; Pixel 7) gzip",
+        },
+    },
+]
 
 
 def call_innertube_player_api(video_id: str,
                                sts: int | None = None,
                                po_token: str | None = None,
-                               visitor_data: str | None = None) -> dict | None:
+                               visitor_data: str | None = None,
+                               client_config: dict | None = None) -> dict | None:
     """
-    Call YouTube's INNERTUBE player API with ANDROID_VR client context.
+    Call YouTube's INNERTUBE player API with the given client context.
 
     Returns the parsed JSON response, or None on failure.
     """
+    cfg = client_config or CLIENTS[0]
     body = {
-        "context": ANDROID_VR_CONTEXT,
+        "context": cfg["context"],
         "videoId": video_id,
         "contentCheckOk": True,
         "racyCheckOk": True,
@@ -665,7 +721,9 @@ def call_innertube_player_api(video_id: str,
     if po_token:
         body["serviceIntegrityDimensions"] = {"poToken": po_token}
 
-    headers = dict(ANDROID_VR_HEADERS)
+    headers = dict(cfg["headers"])
+    headers["Content-Type"] = "application/json"
+    headers["Origin"] = "https://www.youtube.com"
     if visitor_data:
         headers["X-Goog-Visitor-Id"] = visitor_data
 
@@ -677,7 +735,7 @@ def call_innertube_player_api(video_id: str,
     })
     url = f"{INNERTUBE_API_URL}?{query_params}"
 
-    log.info("Calling INNERTUBE API for video %s (ANDROID_VR)", video_id)
+    log.info("Calling INNERTUBE API for video %s (%s)", video_id, cfg["name"])
     try:
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -824,43 +882,58 @@ class YoutubeCipherEngine:
 
     def get_working_urls(self) -> tuple[list[dict], str | None]:
         """
-        Get working stream URLs via INNERTUBE API (ANDROID_VR client).
+        Get working stream URLs via INNERTUBE API.
 
+        Tries multiple client contexts in order.
         Returns (formats, error_msg) where error_msg is None on success.
         """
         sts = self._extract_sts_from_player_js()
         visitor_data = self._fetch_visitor_data()
 
-        response = call_innertube_player_api(
-            self._video_id, sts=sts, visitor_data=visitor_data
-        )
-        if not response:
-            return [], "INNERTUBE API فشل الاستجابة"
+        errors = []
+        for client in CLIENTS:
+            response = call_innertube_player_api(
+                self._video_id, sts=sts, visitor_data=visitor_data,
+                client_config=client,
+            )
+            if not response:
+                errors.append(f"{client['name']}: فشل الاستجابة")
+                continue
 
-        # Check playability
-        playability = response.get("playabilityStatus") or {}
-        status = playability.get("status", "")
-        if status and status != "OK":
-            reason = playability.get("reason", "")
-            subreason = playability.get("subReason", {}).get("reason", "")
-            msg = f"يوتيوب: {reason}"
-            if subreason:
-                msg += f" ({subreason})"
-            return [], msg
+            playability = response.get("playabilityStatus") or {}
+            status = playability.get("status", "")
+            if status and status != "OK":
+                reason = playability.get("reason", "")
+                subreason = playability.get("subReason", {}).get("reason", "")
+                errors.append(f"{client['name']}: {reason}")
+                if subreason:
+                    errors[-1] += f" ({subreason})"
+                continue
 
-        # Try again without visitor_data if it failed with it, or vice versa
-        formats = extract_formats_from_player_response(response)
-        if not formats:
-            if visitor_data:
-                response = call_innertube_player_api(self._video_id, sts=sts)
-            else:
-                response = call_innertube_player_api(
-                    self._video_id, sts=sts,
-                    visitor_data=self._fetch_visitor_data(force=True)
+            formats = extract_formats_from_player_response(response)
+            if not formats:
+                # Try a second attempt with fresh visitor_data
+                vd2 = self._fetch_visitor_data(force=True)
+                response2 = call_innertube_player_api(
+                    self._video_id, sts=sts, visitor_data=vd2,
+                    client_config=client,
                 )
-            if response:
-                formats = extract_formats_from_player_response(response)
+                if response2:
+                    playability2 = response2.get("playabilityStatus") or {}
+                    if playability2.get("status", "") == "OK":
+                        formats = extract_formats_from_player_response(response2)
 
+            if formats:
+                result = self._resolve_format_urls(formats)
+                if result:
+                    return result, None
+
+            errors.append(f"{client['name']}: لا توجد ستريمات")
+
+        return [], " | ".join(errors)
+
+    def _resolve_format_urls(self, formats: list[dict]) -> list[dict]:
+        """Extract or decrypt URLs from format dicts."""
         result = []
         for fmt in formats:
             url = fmt.get("url")
@@ -887,10 +960,7 @@ class YoutubeCipherEngine:
                         ))
                         fmt["url"] = fmt_url
                         result.append(fmt)
-
-        if not result:
-            return [], "لا توجد ستريمات متاحة لهذا الفيديو"
-        return result, None
+        return result
 
     def _fetch_visitor_data(self, force: bool = False) -> str | None:
         """Fetch visitor data from YouTube homepage."""
@@ -901,7 +971,7 @@ class YoutubeCipherEngine:
         try:
             req = urllib.request.Request(
                 "https://www.youtube.com",
-                headers={"User-Agent": ANDROID_VR_HEADERS["User-Agent"]},
+                headers={"User-Agent": CLIENTS[0]["headers"]["User-Agent"]},
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
                 cookie_str = resp.headers.get("Set-Cookie", "")
