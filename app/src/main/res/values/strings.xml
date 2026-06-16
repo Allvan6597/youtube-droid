@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">YT Droid</string>
+    <string name="url_hint">أدخل رابط YouTube</string>
+    <string name="fetch">جلب</string>
+    <string name="loading">جارٍ جلب المعلومات…</string>
+    <string name="error_fetch">فشل جلب معلومات الفيديو</string>
+    <string name="error_download">فشل التحميل</string>
+    <string name="no_formats">لا يوجد ستريمات متاحة</string>
+    <string name="select_format">اختر الجودة للتحميل</string>
+    <string name="unknown">غير معروف</string>
+    <string name="start_download">بدء التحميل</string>
+    <string name="downloading">جارٍ التحميل…</string>
+    <string name="download_complete">اكتمل التحميل</string>
+    <string name="download_failed">فشل التحميل: %s</string>
+    <string name="invalid_url">رابط غير صالح</string>
+</resources>
