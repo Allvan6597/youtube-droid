@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.chaquo.python.Python
 import com.google.android.material.snackbar.Snackbar
 import com.ytdroid.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
@@ -115,7 +116,7 @@ class MainActivity : AppCompatActivity() {
                     module.callAttr("get_formats_for_kotlin", videoId).toString()
                 }
 
-                val result = org.json.JSONObject(formatsJson)
+                val result = org.json.JSONObject(formatsJson as String)
                 if (!result.getBoolean("success")) {
                     val error = result.optString("error", "خطأ غير معروف")
                     val trace = result.optString("traceback", "")
